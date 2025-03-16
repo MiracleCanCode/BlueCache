@@ -2,9 +2,16 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+	"time"
 
 	"github.com/minikeyvalue/src/config"
 	"github.com/minikeyvalue/src/storage"
+	"github.com/minikeyvalue/src/transport/tcp"
+	"github.com/minikeyvalue/src/transport/tcp/handlers"
 	"go.uber.org/zap"
 )
 
@@ -15,15 +22,47 @@ func main() {
 		return
 	}
 	cfg := config.ParseCommandFlags()
-	fmt.Println(cfg.PathToStorageFile)
 
-	st, err := storage.NewWithLoadData(cfg.PathToStorageFile)
+	storageInstance, err := storage.NewWithLoadData(cfg.PathToStorageFile)
 	if err != nil {
 		log.Error("Failed load storage data", zap.Error(err))
 		return
 	}
 
-	if err := st.Add("aasfdssfdsfasfas", "adfas"); err != nil {
-		log.Error("Failed add data to storage", zap.Error(err))
+	transport, err := tcp.NewWithConn(cfg.Port)
+	if err != nil {
+		log.Error("Failed create tcp listener", zap.Error(err))
+		return
+	}
+
+	log.Info("IsaRedis start work", zap.String("port", cfg.Port))
+
+	var wg sync.WaitGroup
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGINT, syscall.SIGBUS, syscall.SIGINT)
+
+	go func() {
+		<-quit
+		log.Info("IsaRedis shutting down.....", zap.Time("time", time.Now()))
+		wg.Wait()
+		transport.CloseConn()
+		log.Info("IsaRedis stop work", zap.Time("isa_redis_stopped_time", time.Now()))
+	}()
+
+	for {
+		conn, err := transport.Conn.Accept()
+		if err != nil {
+			log.Error("Failed listen new connections", zap.Error(err))
+			return
+		}
+		log.Info("Client connected!")
+		handler := handlers.NewStorage(log, conn, storageInstance)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := handler.HandleClient(); err != nil {
+				log.Error("Failed client connection", zap.Error(err))
+			}
+		}()
 	}
 }
