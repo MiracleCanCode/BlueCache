@@ -74,6 +74,16 @@ func (s *storageHandler) HandleClient() {
 				s.conn.Write([]byte(errMsg))
 			}
 		}
+
+		if strings.HasPrefix(message, "DEL") {
+			parts := strings.SplitN(message, " ", 2)
+			if err := s.del(parts[1]); err != nil {
+				errMsg := fmt.Sprintf("Failed delete item from storage: %s\n",
+					err.Error())
+				s.logger.Error("Failed delete data from storage", zap.Error(err))
+				s.conn.Write([]byte(errMsg))
+			}
+		}
 	}
 
 }
@@ -99,5 +109,12 @@ func (s *storageHandler) set(key string, value string) error {
 		return fmt.Errorf("set: failed set data to storage: %w", err)
 	}
 
+	return nil
+}
+
+func (s *storageHandler) del(key string) error {
+	if err := s.storage.Del(key); err != nil {
+		return fmt.Errorf("del: failed delete data from storage: %w", err)
+	}
 	return nil
 }
