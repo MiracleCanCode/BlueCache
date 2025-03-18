@@ -8,7 +8,7 @@ type Config struct {
 }
 
 func ParseCommandFlags() *Config {
-	pathToStorage := flag.String("storage", "./data.json", "Path to your storage file")
+	pathToStorage := flag.String("storage", "./data.log", "Path to your storage file")
 	port := flag.String("port", "6066", "Your custom port for start this key-value storage")
 	flag.Parse()
 	return &Config{

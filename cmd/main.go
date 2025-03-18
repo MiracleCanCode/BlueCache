@@ -12,6 +12,7 @@ import (
 	"github.com/minikeyvalue/src/storage"
 	"github.com/minikeyvalue/src/transport/tcp"
 	"github.com/minikeyvalue/src/transport/tcp/handlers"
+	"github.com/minikeyvalue/src/utils/aof"
 	"go.uber.org/zap"
 )
 
@@ -22,12 +23,8 @@ func main() {
 		return
 	}
 	cfg := config.ParseCommandFlags()
-
-	storageInstance, err := storage.NewWithLoadData(cfg.PathToStorageFile)
-	if err != nil {
-		log.Error("Failed load storage data", zap.Error(err))
-		return
-	}
+	aofManager := aof.New(cfg.PathToStorageFile)
+	storageInstance := storage.New(aofManager)
 
 	transport, err := tcp.NewWithConn(cfg.Port)
 	if err != nil {
@@ -60,9 +57,7 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := handler.HandleClient(); err != nil {
-				log.Error("Failed client connection", zap.Error(err))
-			}
+			handler.HandleClient()
 		}()
 	}
 }

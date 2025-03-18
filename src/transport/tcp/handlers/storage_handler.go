@@ -10,8 +10,9 @@ import (
 )
 
 type storageInterface interface {
-	Add(key string, value any) error
-	Get(key string) (any, error)
+	Set(key string, value string) error
+	Get(key string) (string, error)
+	Del(key string) error
 }
 
 type storageHandler struct {
@@ -29,25 +30,49 @@ func NewStorage(logger *zap.Logger, conn net.Conn,
 	}
 }
 
-func (s *storageHandler) HandleClient() error {
+func (s *storageHandler) HandleClient() {
 	defer s.conn.Close()
 
 	for {
 		reader := bufio.NewReader(s.conn)
 		message, err := reader.ReadString('\n')
 		if err != nil {
-			return fmt.Errorf("HandleClient: failed read ping message: %w", err)
+			s.conn.Write([]byte("Failed read message!\n"))
+			s.logger.Error("Failed read user message", zap.Error(err))
+			return
 		}
 
 		message = strings.TrimSpace(message)
 		if message == "PING" {
 			if err := s.ping(); err != nil {
-				return fmt.Errorf("HandleClient: faield send message to client: %w", err)
+				errMsg := fmt.Sprintf("Failed create response, error: %s\n",
+					err.Error())
+				s.logger.Error("Failed create response for PING command", zap.Error(err))
+				s.conn.Write([]byte(errMsg))
 			}
 		}
 
-		if message == "GET" {
-			s.get()
+		if strings.HasPrefix(message, "GET") {
+			parts := strings.SplitN(message, " ", 2)
+			data, err := s.get(parts[1])
+			if err != nil {
+				errMsg := fmt.Sprintf("Failed get data from your storage, error: %s\n",
+					err.Error())
+				s.logger.Error("Failed get data from user storage", zap.Error(err))
+				s.conn.Write([]byte(errMsg))
+			} else {
+				s.conn.Write([]byte(data + "\n"))
+			}
+		}
+
+		if strings.HasPrefix(message, "SET") {
+			parts := strings.SplitN(message, " ", 3)
+			if err := s.set(parts[1], parts[2]); err != nil {
+				errMsg := fmt.Sprintf("Failed set new data to storage, error: %s\n",
+					err.Error())
+				s.logger.Error("Failed set data to storage", zap.Error(err))
+				s.conn.Write([]byte(errMsg))
+			}
 		}
 	}
 
@@ -60,4 +85,19 @@ func (s *storageHandler) ping() error {
 	return nil
 }
 
-func (s *storageHandler) get() {}
+func (s *storageHandler) get(key string) (string, error) {
+	data, err := s.storage.Get(key)
+	if err != nil {
+		return "", fmt.Errorf("get: failed get data by key %s:%w", key, err)
+	}
+
+	return data, nil
+}
+
+func (s *storageHandler) set(key string, value string) error {
+	if err := s.storage.Set(key, value); err != nil {
+		return fmt.Errorf("set: failed set data to storage: %w", err)
+	}
+
+	return nil
+}
