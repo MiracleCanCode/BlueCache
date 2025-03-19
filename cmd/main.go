@@ -23,9 +23,8 @@ func main() {
 		return
 	}
 	cfg := config.ParseCommandFlags()
-	aofManager := aof.New(cfg.PathToStorageFile)
+	aofManager := aof.New(cfg.PathToStorageFile, log)
 	storageInstance := storage.New(aofManager)
-
 	transport, err := tcp.NewWithConn(cfg.Port)
 	if err != nil {
 		log.Error("Failed create tcp listener", zap.Error(err))
@@ -37,7 +36,9 @@ func main() {
 	var wg sync.WaitGroup
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGINT, syscall.SIGBUS, syscall.SIGINT)
-
+	if err := aofManager.RecoverData(cfg.Port); err != nil {
+		log.Error("Failed recover data", zap.Error(err))
+	}
 	go func() {
 		<-quit
 		log.Info("IsaRedis shutting down.....", zap.Time("time", time.Now()))

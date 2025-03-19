@@ -36,6 +36,8 @@ func (s *storageHandler) HandleClient() {
 	for {
 		reader := bufio.NewReader(s.conn)
 		message, err := reader.ReadString('\n')
+
+		s.logger.Info(message)
 		if err != nil {
 			s.conn.Write([]byte("Failed read message!\n"))
 			s.logger.Error("Failed read user message", zap.Error(err))
@@ -51,7 +53,6 @@ func (s *storageHandler) HandleClient() {
 				s.conn.Write([]byte(errMsg))
 			}
 		}
-
 		if strings.HasPrefix(message, "GET") {
 			parts := strings.SplitN(message, " ", 2)
 			data, err := s.get(parts[1])
