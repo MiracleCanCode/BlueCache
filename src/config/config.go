@@ -9,7 +9,7 @@ type Config struct {
 
 func ParseCommandFlags() *Config {
 	pathToStorage := flag.String("storage",
-		"./isaRedis.txt", "Path to your storage file")
+		"./isaRedis.json", "Path to your json storage file")
 	port := flag.String("port",
 		"6066", "Your custom port for start this key-value storage")
 	flag.Parse()

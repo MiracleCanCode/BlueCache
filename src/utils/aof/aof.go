@@ -1,9 +1,16 @@
 package aof
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 )
+
+type operationJson struct {
+	Method string `json:"method"`
+	Value  string `json:"value"`
+	Key    string `json:"key"`
+}
 
 type AOF struct {
 	aofFileDir string
@@ -22,14 +29,24 @@ func (a *AOF) AppendOperation(method string, key string, value ...string) error 
 		return fmt.Errorf("AppendOperation: failed open aof file: %w", err)
 	}
 
-	var operation string
+	var operation *operationJson
 	if len(value) > 0 {
-		operation = fmt.Sprintf("%s %s %s\n", method, key, value[0])
+		operation = &operationJson{
+			Method: method,
+			Key:    key,
+			Value:  value[0],
+		}
 	} else {
-		operation = fmt.Sprintf("%s %s\n", method, key)
+		operation = &operationJson{
+			Method: method,
+			Key:    key,
+		}
 	}
-
-	if _, err := file.WriteString(operation); err != nil {
+	messageMarshaledToJson, err := json.Marshal(&operation)
+	if err != nil {
+		return fmt.Errorf("AppendOperation: failed marshaling data to json: %w", err)
+	}
+	if _, err := file.WriteString(string(messageMarshaledToJson) + "\n"); err != nil {
 		return fmt.Errorf("AppendOperation: failed append operation to aof file: %w", err)
 	}
 
