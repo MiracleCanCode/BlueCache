@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
-
+	"io"
 	"go.uber.org/zap"
 )
 
@@ -35,16 +35,20 @@ func (s *storageHandler) HandleClient() {
 
 	for {
 		reader := bufio.NewReader(s.conn)
-		message, err := reader.ReadString('\n')
-
-		s.logger.Info(message)
+		input := make([]byte, (1024 * 4))
+		readedMessage, err := reader.Read(input)
+		message :=	string(input[0:readedMessage])
 		if err != nil {
+			if err == io.EOF || len(message) <= 0 {
+				err = nil
+			}
 			s.conn.Write([]byte("Failed read message!\n"))
 			s.logger.Error("Failed read user message", zap.Error(err))
 			return
 		}
 
 		message = strings.TrimSpace(message)
+
 		if message == "PING" {
 			if err := s.ping(); err != nil {
 				errMsg := fmt.Sprintf("Failed create response, error: %s\n",
@@ -53,6 +57,7 @@ func (s *storageHandler) HandleClient() {
 				s.conn.Write([]byte(errMsg))
 			}
 		}
+
 		if strings.HasPrefix(message, "GET") {
 			parts := strings.SplitN(message, " ", 2)
 			data, err := s.get(parts[1])

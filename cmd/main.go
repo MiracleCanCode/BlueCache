@@ -7,7 +7,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
+	"github.com/minikeyvalue/src/utils/recoverDataFromAof"
 	"github.com/minikeyvalue/src/config"
 	"github.com/minikeyvalue/src/storage"
 	"github.com/minikeyvalue/src/transport/tcp"
@@ -23,8 +23,14 @@ func main() {
 		return
 	}
 	cfg := config.ParseCommandFlags()
-	aofManager := aof.New(cfg.PathToStorageFile, log)
-	storageInstance := storage.New(aofManager)
+	aofManager := aof.New(cfg.PathToStorageFile)
+	storageInstance := storage.New(aofManager, false)
+	storageInstanceForRecoverData := storage.New(aofManager, true)
+	recoverData := recoverdatafromaof.New(storageInstanceForRecoverData)
+	if err := recoverData.Recover(cfg.PathToStorageFile); err != nil {
+		log.Error("Failed recover data", zap.Error(err))
+		return
+	}
 	transport, err := tcp.NewWithConn(cfg.Port)
 	if err != nil {
 		log.Error("Failed create tcp listener", zap.Error(err))
@@ -36,9 +42,7 @@ func main() {
 	var wg sync.WaitGroup
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGINT, syscall.SIGBUS, syscall.SIGINT)
-	if err := aofManager.RecoverData(cfg.Port); err != nil {
-		log.Error("Failed recover data", zap.Error(err))
-	}
+	
 	go func() {
 		<-quit
 		log.Info("IsaRedis shutting down.....", zap.Time("time", time.Now()))
