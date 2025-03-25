@@ -33,7 +33,7 @@ func (s *Storage) Get(key string) (string, error) {
 func (s *Storage) Set(key string, value string) error {
 	_, ok := store[key]
 	if ok {
-		return fmt.Errorf("Set: failed set data to storage, key is busy")
+		return fmt.Errorf("Set: failed set data to storage, key is busy: %s", key)
 	}
 
 	if !s.recoverData {

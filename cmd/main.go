@@ -15,6 +15,7 @@ import (
 	"github.com/minikeyvalue/src/utils/aof"
 	recoverdatafromaof "github.com/minikeyvalue/src/utils/recoverDataFromAof"
 	"github.com/minikeyvalue/src/utils/retry"
+	"github.com/minikeyvalue/src/utils/timeout"
 	"go.uber.org/zap"
 )
 
@@ -25,12 +26,17 @@ func main() {
 		return
 	}
 	cfg := config.ParseCommandFlags()
-	aofManager := aof.New(cfg.PathToStorageFile)
+	aofManager, err := aof.NewAOF(cfg.PathToStorageFile)
+	if err != nil {
+		log.Error("Failed create aof manager instance", zap.Error(err))
+		return
+	}
 	storageInstance := storage.New(aofManager, false)
 	recoveryStorage := storage.New(aofManager, true)
 	recoverData := recoverdatafromaof.New(recoveryStorage)
 	baseRetryDelayMiliseconds := 300
 	retryAttempts := 5
+	timeoutMillisecondsForRecoverData := 6000
 
 	recoveryDataFn := func() error {
 		if err := recoverData.Recover(cfg.PathToStorageFile); err != nil {
@@ -44,6 +50,12 @@ func main() {
 		return
 	}
 
+	if err := timeout.Operation(timeoutMillisecondsForRecoverData,
+		recoveryDataFn); err != nil {
+		log.Error("Timeout for recover data operation!", zap.Error(err))
+		return
+	}
+
 	var transport *tcp.TcpConn
 	createTCPConnection := func() error {
 		transport, err = tcp.NewWithConn(cfg.Port)
@@ -52,7 +64,8 @@ func main() {
 		}
 		return nil
 	}
-	if err := retry.RetryOperation(log, createTCPConnection, baseRetryDelayMiliseconds, retryAttempts); err != nil {
+	if err := retry.RetryOperation(log, createTCPConnection, baseRetryDelayMiliseconds,
+		retryAttempts); err != nil {
 		log.Error("Failed create tcp connection", zap.Error(err))
 		return
 	}
