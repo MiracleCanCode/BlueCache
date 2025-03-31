@@ -44,11 +44,6 @@ func main() {
 		}
 		return nil
 	}
-	if err := retry.RetryOperation(log, recoveryDataFn,
-		baseRetryDelayMiliseconds, retryAttempts); err != nil {
-		log.Error("Failed recover data", zap.Error(err))
-		return
-	}
 
 	if err := timeout.Operation(timeoutMillisecondsForRecoverData,
 		recoveryDataFn); err != nil {
@@ -64,7 +59,8 @@ func main() {
 		}
 		return nil
 	}
-	if err := retry.RetryOperation(log, createTCPConnection, baseRetryDelayMiliseconds,
+	if err := retry.RetryOperation(log, createTCPConnection,
+		baseRetryDelayMiliseconds,
 		retryAttempts); err != nil {
 		log.Error("Failed create tcp connection", zap.Error(err))
 		return

@@ -1,20 +1,12 @@
 package aof
 
 import (
-	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"sync"
 	"time"
 )
-
-type operationJson struct {
-	Method string `json:"method"`
-	Value  string `json:"value"`
-	Key    string `json:"key"`
-}
 
 type AOF struct {
 	file      *os.File
@@ -29,13 +21,17 @@ func NewAOF(aofFileDir string) (*AOF, error) {
 		return nil, fmt.Errorf("NewAOF: failed to open aof file: %w", err)
 	}
 
+	flushTimeDefault := time.Millisecond * 100
 	aof := &AOF{
 		file:      file,
-		buffer:    make([]string, 0, 100),
-		flushTime: time.Millisecond * 100,
+		buffer:    make([]string, 0, 1000),
+		flushTime: flushTimeDefault,
 	}
-
-	go aof.syncWorker()
+	go func() {
+		if err := aof.syncWorker(); err != nil {
+			return
+		}
+	}()
 
 	return aof, nil
 }
@@ -44,22 +40,18 @@ func (a *AOF) AppendOperation(method, key string, value ...string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	var operation *operationJson
+	var val string
 	if len(value) > 0 {
-		operation = &operationJson{Method: method, Key: key, Value: value[0]}
-	} else {
-		operation = &operationJson{Method: method, Key: key}
+		val = value[0]
 	}
+	message := fmt.Sprintf("%s %s %s", method, key, val)
 
-	messageMarshaledToJson, err := json.Marshal(&operation)
-	if err != nil {
-		return fmt.Errorf("AppendOperation: failed marshaling data to json: %w", err)
-	}
-
-	a.buffer = append(a.buffer, string(messageMarshaledToJson)+"\n")
+	a.buffer = append(a.buffer, message+"\n")
 
 	if len(a.buffer) >= 100 {
-		return a.flush()
+		if err := a.flush(); err != nil {
+			return fmt.Errorf("AppendOperation: failed flush: %w", err)
+		}
 	}
 
 	return nil
@@ -69,22 +61,26 @@ func (a *AOF) flush() error {
 	data := strings.Join(a.buffer, "")
 	a.buffer = a.buffer[:0]
 
-	_, err := a.file.WriteString(data)
-	return err
+	if _, err := a.file.WriteString(data); err != nil {
+		return fmt.Errorf("flush: failed write string to file: %w", err)
+	}
+	return nil
 }
 
-func (a *AOF) syncWorker() {
+func (a *AOF) syncWorker() error {
 	ticker := time.NewTicker(a.flushTime)
 	defer ticker.Stop()
 
 	for range ticker.C {
 		a.mu.Lock()
 		if err := a.flush(); err != nil {
-			log.Println("AOF syncWorker: failed to flush:", err)
+			return fmt.Errorf("syncWorker: failed flush time: %w", err)
 		}
 		if err := a.file.Sync(); err != nil {
-			log.Println("AOF syncWorker: failed to sync:", err)
+			return fmt.Errorf("syncWorker: failed sync file: %w", err)
 		}
 		a.mu.Unlock()
 	}
+
+	return nil
 }

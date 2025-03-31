@@ -22,7 +22,6 @@ func New(aof aofInterface, recoverData bool) *Storage {
 
 func (s *Storage) Get(key string) (string, error) {
 	data, ok := store[key]
-
 	if !ok {
 		return "", fmt.Errorf("Get: failed get data by key item is exist")
 	}
