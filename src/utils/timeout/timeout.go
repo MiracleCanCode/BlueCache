@@ -20,7 +20,7 @@ func Operation(delayMiliseconds int, fn func() error) error {
 	select {
 	case err := <-done:
 		if err != nil {
-			return fmt.Errorf("Operation timeout: error: %w", err)
+			return fmt.Errorf("Operation failed: %w", err)
 		}
 		return nil
 	case <-ctx.Done():

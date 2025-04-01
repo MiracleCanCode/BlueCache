@@ -9,7 +9,7 @@ import (
 
 func RetryOperation(log *zap.Logger, operation func() error, baseDelay int, attempts int) error {
 	var lastErr error
-	for i := range attempts {
+	for i := 0; i < attempts; i++ {
 		lastErr = operation()
 		if lastErr == nil {
 			if i > 0 {

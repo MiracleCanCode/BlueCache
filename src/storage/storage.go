@@ -1,6 +1,11 @@
 package storage
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/minikeyvalue/src/utils/constants"
+)
 
 type aofInterface interface {
 	AppendOperation(method string, key string, value ...string) error
@@ -36,7 +41,7 @@ func (s *Storage) Set(key string, value string) error {
 	}
 
 	if !s.recoverData {
-		if err := s.aofManager.AppendOperation("SET", key, value); err != nil {
+		if err := s.aofManager.AppendOperation(constants.SET_COMMAND, key, value); err != nil {
 			return fmt.Errorf("Set: failed append operation to aof: %w", err)
 		}
 	}
@@ -47,16 +52,14 @@ func (s *Storage) Set(key string, value string) error {
 }
 
 func (s *Storage) Del(key string) error {
-	_, ok := store[key]
-	if !ok {
-		return fmt.Errorf("Del: the key does not exist")
-	}
-	delete(store, key)
+	modifyKey := strings.TrimSpace(key)
 	if !s.recoverData {
-		if err := s.aofManager.AppendOperation("DEL", key); err != nil {
+		if err := s.aofManager.AppendOperation(constants.DEL_COMMAND, key); err != nil {
 			return fmt.Errorf("Del: failed append operation to aof file: %w", err)
 		}
 	}
+
+	delete(store, modifyKey)
 
 	return nil
 }

@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"io"
+
+	"github.com/minikeyvalue/src/utils/constants"
 	"go.uber.org/zap"
 )
+
+const MAX_INPUT_SIZE = 4096
 
 type storageInterface interface {
 	Set(key string, value string) error
@@ -16,17 +19,19 @@ type storageInterface interface {
 }
 
 type storageHandler struct {
-	logger  *zap.Logger
-	conn    net.Conn
-	storage storageInterface
+	logger     *zap.Logger
+	conn       net.Conn
+	storage    storageInterface
+	reqLogging bool
 }
 
 func NewStorage(logger *zap.Logger, conn net.Conn,
-	storage storageInterface) *storageHandler {
+	storage storageInterface, reqLogging bool) *storageHandler {
 	return &storageHandler{
-		logger:  logger,
-		conn:    conn,
-		storage: storage,
+		logger:     logger,
+		conn:       conn,
+		storage:    storage,
+		reqLogging: reqLogging,
 	}
 }
 
@@ -35,63 +40,60 @@ func (s *storageHandler) HandleClient() {
 
 	for {
 		reader := bufio.NewReader(s.conn)
-		input := make([]byte, (1024 * 4))
+		input := make([]byte, MAX_INPUT_SIZE)
 		readedMessage, err := reader.Read(input)
-		message :=	string(input[0:readedMessage])
+		message := string(input[0:readedMessage])
 		if err != nil {
-			if err == io.EOF || len(message) <= 0 {
-				err = nil
-			}
 			s.conn.Write([]byte("Failed read message!\n"))
 			s.logger.Error("Failed read user message", zap.Error(err))
 			return
 		}
 
 		message = strings.TrimSpace(message)
-
-		if message == "PING" {
-			if err := s.ping(); err != nil {
-				errMsg := fmt.Sprintf("Failed create response, error: %s\n",
-					err.Error())
-				s.logger.Error("Failed create response for PING command", zap.Error(err))
-				s.conn.Write([]byte(errMsg))
-			}
+		if s.reqLogging {
+			s.logger.Info("request", zap.String("message", message))
 		}
-
-		if strings.HasPrefix(message, "GET") {
-			parts := strings.SplitN(message, " ", 2)
-			data, err := s.get(parts[1])
-			if err != nil {
-				errMsg := fmt.Sprintf("Failed get data from your storage, error: %s\n",
-					err.Error())
-				s.logger.Error("Failed get data from user storage", zap.Error(err))
-				s.conn.Write([]byte(errMsg))
-			} else {
-				s.conn.Write([]byte(data + "\n"))
-			}
-		}
-
-		if strings.HasPrefix(message, "SET") {
-			parts := strings.SplitN(message, " ", 3)
-			if err := s.set(parts[1], parts[2]); err != nil {
-				errMsg := fmt.Sprintf("Failed set new data to storage, error: %s\n",
-					err.Error())
-				s.logger.Error("Failed set data to storage", zap.Error(err))
-				s.conn.Write([]byte(errMsg))
-			}
-		}
-
-		if strings.HasPrefix(message, "DEL") {
-			parts := strings.SplitN(message, " ", 2)
-			if err := s.del(parts[1]); err != nil {
-				errMsg := fmt.Sprintf("Failed delete item from storage: %s\n",
-					err.Error())
-				s.logger.Error("Failed delete data from storage", zap.Error(err))
-				s.conn.Write([]byte(errMsg))
-			}
+		if err := s.distributeCommands(message); err != nil {
+			errMsg := fmt.Sprintf("Error: %s\n", err.Error())
+			s.logger.Error("Failed proccesing requests", zap.Error(err))
+			s.conn.Write([]byte(errMsg))
 		}
 	}
 
+}
+
+func (s *storageHandler) distributeCommands(message string) error {
+	if message == constants.PING_COMMAND {
+		if err := s.ping(); err != nil {
+			return fmt.Errorf("Failed create response: %w", err)
+		}
+	}
+
+	if strings.HasPrefix(message, constants.GET_COMMAND) {
+		parts := strings.SplitN(message, " ", 2)
+		data, err := s.get(parts[1])
+		if err != nil {
+			return fmt.Errorf("Failed get data from your storage: %w", err)
+		}
+
+		s.conn.Write([]byte(data + "\n"))
+	}
+
+	if strings.HasPrefix(message, constants.SET_COMMAND) {
+		parts := strings.SplitN(message, " ", 3)
+		if err := s.set(parts[1], parts[2]); err != nil {
+			return fmt.Errorf("Failed set new data to storage: %w", err)
+		}
+	}
+
+	if strings.HasPrefix(message, constants.DEL_COMMAND) {
+		parts := strings.SplitN(message, " ", 2)
+		if err := s.del(parts[1]); err != nil {
+			return fmt.Errorf("Failed delete data from storage: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (s *storageHandler) ping() error {

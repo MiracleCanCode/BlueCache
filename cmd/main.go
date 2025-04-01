@@ -25,8 +25,9 @@ func main() {
 		fmt.Println(fmt.Errorf("main: failed create logger instance: %w", err))
 		return
 	}
+	defer log.Sync()
 	cfg := config.ParseCommandFlags()
-	aofManager, err := aof.NewAOF(cfg.PathToStorageFile)
+	aofManager, err := aof.NewAOF(cfg.PathToStorageFile, log)
 	if err != nil {
 		log.Error("Failed create aof manager instance", zap.Error(err))
 		return
@@ -36,7 +37,7 @@ func main() {
 	recoverData := recoverdatafromaof.New(recoveryStorage)
 	baseRetryDelayMiliseconds := 300
 	retryAttempts := 5
-	timeoutMillisecondsForRecoverData := 6000
+	timeoutMillisecondsForRecoverData := 600
 
 	recoveryDataFn := func() error {
 		if err := recoverData.Recover(cfg.PathToStorageFile); err != nil {
@@ -55,7 +56,7 @@ func main() {
 	createTCPConnection := func() error {
 		transport, err = tcp.NewWithConn(cfg.Port)
 		if err != nil {
-			return fmt.Errorf("CreateTcpConnectio: failed create tcp connection: %w", err)
+			return fmt.Errorf("CreateTcpConnection: failed create tcp connection: %w", err)
 		}
 		return nil
 	}
@@ -66,7 +67,8 @@ func main() {
 		return
 	}
 
-	log.Info("IsaRedis start work", zap.String("port", cfg.Port))
+	log.Info("IsaRedis start work", zap.String("port", cfg.Port), zap.Bool("logging", cfg.LogRequest),
+		zap.String("storage_path", cfg.PathToStorageFile))
 
 	var wg sync.WaitGroup
 	quit := make(chan os.Signal, 1)
@@ -87,7 +89,7 @@ func main() {
 			break
 		}
 		log.Info("Client connected!")
-		handler := handlers.NewStorage(log, conn, storageInstance)
+		handler := handlers.NewStorage(log, conn, storageInstance, cfg.LogRequest)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

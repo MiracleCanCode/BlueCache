@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/minikeyvalue/src/utils/constants"
 )
 
 type storage interface {
@@ -31,7 +33,7 @@ func (r *recoverData) Recover(aofFilePath string) error {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if len(line) == 0 || line == "EOF" {
+		if len(line) == 0 {
 			continue
 		}
 		if err := r.distributeData(line); err != nil {
@@ -43,7 +45,7 @@ func (r *recoverData) Recover(aofFilePath string) error {
 }
 
 func (r *recoverData) distributeData(message string) error {
-	if strings.HasPrefix(message, "SET ") {
+	if strings.HasPrefix(message, constants.SET_COMMAND) {
 		parts := strings.SplitN(message, " ", 3)
 		if len(parts) != 3 {
 			return fmt.Errorf("distributeData: incrorect set data string")
@@ -53,7 +55,7 @@ func (r *recoverData) distributeData(message string) error {
 		}
 	}
 
-	if strings.HasPrefix(message, "DEL ") {
+	if strings.HasPrefix(message, constants.DEL_COMMAND) {
 		parts := strings.SplitN(message, " ", 2)
 		if len(parts) != 2 {
 			return fmt.Errorf("distributeData: incorect delete data string")

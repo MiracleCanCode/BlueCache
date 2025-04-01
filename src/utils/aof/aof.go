@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 type AOF struct {
@@ -13,23 +15,28 @@ type AOF struct {
 	mu        sync.Mutex
 	buffer    []string
 	flushTime time.Duration
+	logger    *zap.Logger
 }
 
-func NewAOF(aofFileDir string) (*AOF, error) {
+const flushTimeDefault = time.Second * 10
+const maxBufferSize = 100
+
+func NewAOF(aofFileDir string, log *zap.Logger) (*AOF, error) {
 	file, err := os.OpenFile(aofFileDir, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("NewAOF: failed to open aof file: %w", err)
 	}
 
-	flushTimeDefault := time.Millisecond * 100
 	aof := &AOF{
 		file:      file,
-		buffer:    make([]string, 0, 1000),
+		buffer:    make([]string, 0, maxBufferSize),
 		flushTime: flushTimeDefault,
+		logger:    log,
 	}
+
 	go func() {
 		if err := aof.syncWorker(); err != nil {
-			return
+			log.Error("Failed aof sync worker", zap.Error(err))
 		}
 	}()
 
@@ -59,11 +66,12 @@ func (a *AOF) AppendOperation(method, key string, value ...string) error {
 
 func (a *AOF) flush() error {
 	data := strings.Join(a.buffer, "")
-	a.buffer = a.buffer[:0]
 
 	if _, err := a.file.WriteString(data); err != nil {
 		return fmt.Errorf("flush: failed write string to file: %w", err)
 	}
+
+	a.buffer = a.buffer[:0]
 	return nil
 }
 
@@ -74,10 +82,10 @@ func (a *AOF) syncWorker() error {
 	for range ticker.C {
 		a.mu.Lock()
 		if err := a.flush(); err != nil {
-			return fmt.Errorf("syncWorker: failed flush time: %w", err)
+			a.logger.Error("Failed flush time", zap.Error(err))
 		}
 		if err := a.file.Sync(); err != nil {
-			return fmt.Errorf("syncWorker: failed sync file: %w", err)
+			a.logger.Error("Failed file sync", zap.Error(err))
 		}
 		a.mu.Unlock()
 	}
