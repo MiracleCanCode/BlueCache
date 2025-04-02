@@ -1,4 +1,4 @@
-# IsaRedis this is my attempt creating clone redis
+# BlueCache this is key-value storage 
 
 ### Base operations:
 
