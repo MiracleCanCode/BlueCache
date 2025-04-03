@@ -39,7 +39,6 @@ func (s *storageHandler) HandleClient() {
 
 	isAuth := false
 
-	// Запрос имени пользователя
 	if err := s.formatAndSendBytes(constants.EnterUserName); err != nil {
 		s.logger.Error("Failed to send username request", zap.Error(err))
 		return
@@ -57,7 +56,6 @@ func (s *storageHandler) HandleClient() {
 		return
 	}
 
-	// Запрос пароля
 	if err := s.formatAndSendBytes(constants.EnterUserPassword); err != nil {
 		s.logger.Error("Failed to send password request", zap.Error(err))
 		return
@@ -81,7 +79,6 @@ func (s *storageHandler) HandleClient() {
 		return
 	}
 
-	// Основной цикл обработки команд
 	for {
 		message, err := s.readUserMessage()
 		if err != nil {
@@ -94,7 +91,6 @@ func (s *storageHandler) HandleClient() {
 			s.logger.Info("Request", zap.String("message", message))
 		}
 
-		// Проверяем, что юзер авторизован
 		if !isAuth {
 			s.formatAndSendBytes(constants.IncorrectUserData)
 			continue
