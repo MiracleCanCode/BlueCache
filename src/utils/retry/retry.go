@@ -7,7 +7,8 @@ import (
 	"go.uber.org/zap"
 )
 
-func RetryOperation(log *zap.Logger, operation func() error, baseDelay int, attempts int) error {
+func RetryOperation(log *zap.Logger, operation func() error, baseDelay int,
+	attempts int) error {
 	var lastErr error
 	for i := 0; i < attempts; i++ {
 		lastErr = operation()
