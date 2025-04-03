@@ -6,11 +6,10 @@ import (
 	"net"
 	"strings"
 
+	"github.com/minikeyvalue/src/config"
 	"github.com/minikeyvalue/src/utils/constants"
 	"go.uber.org/zap"
 )
-
-const MAX_INPUT_SIZE = 4096
 
 type storageInterface interface {
 	Set(key string, value string) error
@@ -19,47 +18,94 @@ type storageInterface interface {
 }
 
 type storageHandler struct {
-	logger     *zap.Logger
-	conn       net.Conn
-	storage    storageInterface
-	reqLogging bool
+	logger  *zap.Logger
+	conn    net.Conn
+	storage storageInterface
+	cfg     *config.Config
 }
 
-func NewStorage(logger *zap.Logger, conn net.Conn,
-	storage storageInterface, reqLogging bool) *storageHandler {
+func NewStorageHandler(logger *zap.Logger, conn net.Conn,
+	storage storageInterface, cfg *config.Config) *storageHandler {
 	return &storageHandler{
-		logger:     logger,
-		conn:       conn,
-		storage:    storage,
-		reqLogging: reqLogging,
+		logger:  logger,
+		conn:    conn,
+		storage: storage,
+		cfg:     cfg,
 	}
 }
 
 func (s *storageHandler) HandleClient() {
 	defer s.conn.Close()
 
+	isAuth := false
+
+	// Запрос имени пользователя
+	if err := s.formatAndSendBytes(constants.EnterUserName); err != nil {
+		s.logger.Error("Failed to send username request", zap.Error(err))
+		return
+	}
+
+	username, err := s.readUserMessage()
+	if err != nil {
+		s.logger.Error("Failed to read username", zap.Error(err))
+		s.formatAndSendBytes("Failed to read message, please, try again.")
+		return
+	}
+
+	if username != s.cfg.UserName {
+		s.formatAndSendBytes(constants.IncorrectUserData)
+		return
+	}
+
+	// Запрос пароля
+	if err := s.formatAndSendBytes(constants.EnterUserPassword); err != nil {
+		s.logger.Error("Failed to send password request", zap.Error(err))
+		return
+	}
+
+	password, err := s.readUserMessage()
+	if err != nil {
+		s.logger.Error("Failed to read password", zap.Error(err))
+		s.formatAndSendBytes("Failed to read message, please, try again.")
+		return
+	}
+
+	if password != s.cfg.UserPassword {
+		s.formatAndSendBytes(constants.IncorrectUserData)
+		return
+	}
+
+	isAuth = true
+	if err := s.formatAndSendBytes(constants.SuccessfulLogin); err != nil {
+		s.logger.Error("Failed to send login success message", zap.Error(err))
+		return
+	}
+
+	// Основной цикл обработки команд
 	for {
-		reader := bufio.NewReader(s.conn)
-		input := make([]byte, MAX_INPUT_SIZE)
-		readedMessage, err := reader.Read(input)
-		message := string(input[0:readedMessage])
+		message, err := s.readUserMessage()
 		if err != nil {
-			s.conn.Write([]byte("Failed read message!\n"))
-			s.logger.Error("Failed read user message", zap.Error(err))
+			s.logger.Error("Failed to read user message", zap.Error(err))
+			s.formatAndSendBytes("Failed to read message, please, try again.")
 			return
 		}
 
-		message = strings.TrimSpace(message)
-		if s.reqLogging {
-			s.logger.Info("request", zap.String("message", message))
+		if s.cfg.Logging {
+			s.logger.Info("Request", zap.String("message", message))
 		}
+
+		// Проверяем, что юзер авторизован
+		if !isAuth {
+			s.formatAndSendBytes(constants.IncorrectUserData)
+			continue
+		}
+
 		if err := s.distributeCommands(message); err != nil {
-			errMsg := fmt.Sprintf("Error: %s\n", err.Error())
-			s.logger.Error("Failed proccesing requests", zap.Error(err))
-			s.conn.Write([]byte(errMsg))
+			errMsg := fmt.Sprintf("Error: %s", err.Error())
+			s.logger.Error("Failed processing request", zap.Error(err))
+			s.formatAndSendBytes(errMsg)
 		}
 	}
-
 }
 
 func (s *storageHandler) distributeCommands(message string) error {
@@ -76,7 +122,9 @@ func (s *storageHandler) distributeCommands(message string) error {
 			return fmt.Errorf("Failed get data from your storage: %w", err)
 		}
 
-		s.conn.Write([]byte(data + "\n"))
+		if err := s.formatAndSendBytes(data); err != nil {
+			return fmt.Errorf("distributeCommands: failed send data to user: %w", err)
+		}
 	}
 
 	if strings.HasPrefix(message, constants.SET_COMMAND) {
@@ -97,7 +145,7 @@ func (s *storageHandler) distributeCommands(message string) error {
 }
 
 func (s *storageHandler) ping() error {
-	if _, err := s.conn.Write([]byte("PONG\n")); err != nil {
+	if err := s.formatAndSendBytes("PONG"); err != nil {
 		return fmt.Errorf("ping: failed send ping message for client: %w", err)
 	}
 	return nil
@@ -124,5 +172,23 @@ func (s *storageHandler) del(key string) error {
 	if err := s.storage.Del(key); err != nil {
 		return fmt.Errorf("del: failed delete data from storage: %w", err)
 	}
+	return nil
+}
+
+func (s *storageHandler) readUserMessage() (string, error) {
+	reader := bufio.NewReader(s.conn)
+	message, err := reader.ReadString('\n')
+	if err != nil {
+		return "", fmt.Errorf("readUserMessage: failed to read user message: %w", err)
+	}
+
+	return strings.TrimSpace(message), nil
+}
+
+func (s *storageHandler) formatAndSendBytes(msg string) error {
+	if _, err := s.conn.Write([]byte(msg + "\n")); err != nil {
+		return fmt.Errorf("formatAndSendBytes: failed send bytes to user: %w", err)
+	}
+
 	return nil
 }

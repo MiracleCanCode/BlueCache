@@ -8,12 +8,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/minikeyvalue/src/aof"
 	"github.com/minikeyvalue/src/config"
+	recoverdatafromaof "github.com/minikeyvalue/src/recoverDataFromAof"
 	"github.com/minikeyvalue/src/storage"
 	"github.com/minikeyvalue/src/transport/tcp"
 	"github.com/minikeyvalue/src/transport/tcp/handlers"
-	"github.com/minikeyvalue/src/utils/aof"
-	recoverdatafromaof "github.com/minikeyvalue/src/utils/recoverDataFromAof"
 	"github.com/minikeyvalue/src/utils/retry"
 	"github.com/minikeyvalue/src/utils/timeout"
 	"go.uber.org/zap"
@@ -26,7 +26,11 @@ func main() {
 		return
 	}
 	defer log.Sync()
-	cfg := config.ParseCommandFlags()
+	cfg, err := config.New()
+	if err != nil {
+		log.Error("Config error", zap.Error(err))
+	}
+	log.Info("user_data", zap.String("password", cfg.UserPassword), zap.String("name", cfg.UserName))
 	aofManager, err := aof.NewAOF(cfg.PathToStorageFile, log)
 	if err != nil {
 		log.Error("Failed create aof manager instance", zap.Error(err))
@@ -67,7 +71,7 @@ func main() {
 		return
 	}
 
-	log.Info("IsaRedis start work", zap.String("port", cfg.Port), zap.Bool("logging", cfg.LogRequest),
+	log.Info("IsaRedis start work", zap.String("port", cfg.Port), zap.Bool("logging", cfg.Logging),
 		zap.String("storage_path", cfg.PathToStorageFile))
 
 	var wg sync.WaitGroup
@@ -89,7 +93,8 @@ func main() {
 			break
 		}
 		log.Info("Client connected!")
-		handler := handlers.NewStorage(log, conn, storageInstance, cfg.LogRequest)
+
+		handler := handlers.NewStorageHandler(log, conn, storageInstance, cfg)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
