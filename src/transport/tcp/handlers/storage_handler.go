@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"net"
 	"strings"
-
+  "time"
 	"github.com/minikeyvalue/src/config"
 	"github.com/minikeyvalue/src/utils/constants"
 	"go.uber.org/zap"
 )
 
 type storageInterface interface {
-	Set(key string, value string) error
+	Set(key string, value string, ttl time.Date) error
 	Get(key string) (string, error)
 	Del(key string) error
 }
@@ -157,7 +157,9 @@ func (s *storageHandler) get(key string) (string, error) {
 }
 
 func (s *storageHandler) set(key string, value string) error {
-	if err := s.storage.Set(key, value); err != nil {
+  defaultTimeTTL := time.Minute * 10
+  defaultTTL := time.Now().UTC().Add(defaultTimeTTL)
+	if err := s.storage.Set(key, value, defaultTTL); err != nil {
 		return fmt.Errorf("set: failed set data to storage: %w", err)
 	}
 

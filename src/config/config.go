@@ -29,8 +29,8 @@ func New() (*Config, error) {
 	port := flag.String("port", "6066", "Custom port for BlueCache instance")
 	logging := flag.Bool("logging", false, "Enable request logging")
 	masterURL := flag.String("master_url", "", "Set the current server as a replica")
-	userName := flag.String("user_name", "", "User name for BlueCache connection")
-	userPassword := flag.String("user_password", "", "User password for BlueCache connection")
+	userName := flag.String("user_name", "blueCache", "User name for BlueCache connection")
+	userPassword := flag.String("user_password", "blueCache", "User password for BlueCache connection")
 
 	flag.Parse()
 

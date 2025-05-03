@@ -30,7 +30,6 @@ func main() {
 	if err != nil {
 		log.Error("Config error", zap.Error(err))
 	}
-	log.Info("user_data", zap.String("password", cfg.UserPassword), zap.String("name", cfg.UserName))
 	aofManager, err := aof.NewAOF(cfg.PathToStorageFile, log)
 	if err != nil {
 		log.Error("Failed create aof manager instance", zap.Error(err))
