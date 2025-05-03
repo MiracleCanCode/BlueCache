@@ -17,6 +17,7 @@ var ttlStore map[string]time.Time = make(map[string]time.Time)
 type Storage struct {
 	aofManager  aofInterface
 	recoverData bool
+  mu sync.Mutex
 }
 
 func New(aof aofInterface, recoverData bool) *Storage {
@@ -27,6 +28,8 @@ func New(aof aofInterface, recoverData bool) *Storage {
 }
 
 func (s *Storage) Get(key string) (string, error) {
+  s.mu.Lock()
+  defer s.mu.Unlock()
 	data, ok := store[key]
 	if !ok {
 		return "", fmt.Errorf("Get: failed get data by key item is exist")
@@ -36,13 +39,8 @@ func (s *Storage) Get(key string) (string, error) {
   if !ok {
     return "", fmt.Errorf("Get: failed get data ttl")
   }
-  
-  healthRecord, err := s.checkRecordLifetime(ttl)
-  if err != nil {
-    return "", fmt.Errorf("Get: failed check ttl for record")
-  }
 
-  if !healthRecord {
+  if !s.checkRecordLifetime(ttl) {
     delete(store, key)
     delete(ttlStore, key)
     return "", fmt.Errorf("Get: failed get data life's time is up")
@@ -51,7 +49,9 @@ func (s *Storage) Get(key string) (string, error) {
 	return data, nil
 }
 
-func (s *Storage) Set(key string, value string, ttl time.Time) error {
+func (s *Storage) Set(key string, ttl time.Time, value string) error {
+  s.mu.Lock()
+  defer s.mu.Unlock()
 	_, ok := store[key]
 	if ok {
 		return fmt.Errorf("Set: failed set data to storage, key is busy: %s", key)
@@ -71,9 +71,11 @@ func (s *Storage) Set(key string, value string, ttl time.Time) error {
 }
 
 func (s *Storage) Del(key string) error {
+  s.mu.Lock()
+  defer s.mu.Unlock()
 	modifyKey := strings.TrimSpace(key)
 	if !s.recoverData {
-		if err := s.aofManager.AppendOperation(constants.DEL_COMMAND, key, nil); err != nil {
+		if err := s.aofManager.AppendOperation(constants.DEL_COMMAND, key, time.Time{}); err != nil {
 			return fmt.Errorf("Del: failed append operation to aof file: %w", err)
 		}
 	}
@@ -83,17 +85,11 @@ func (s *Storage) Del(key string) error {
 	return nil
 }
 
-func (s *Storage) checkRecordLifetime(recordLifetime time.Time) (bool, error) {
-  const timeLayout = "2006-01-02 15:04:05.9999999 -0700 MST"
-  parseRecordLifetime, err := time.Parse(timeLayout, recordLifetime)
-  if err != nil {
-    return false, fmt.Errorf("checkRecordLifetime: failed parse record lifetime: %w", err)
-  }
-
+func (s *Storage) checkRecordLifetime(recordLifetime time.Time) bool {
   now := time.Now()
-  if parseRecordLifetime.Before(now) {
-    return false, nil 
+  if recordLifetime.Before(now) {
+    return false 
   }   
 
-  return true, nil
+  return true
 }

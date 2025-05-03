@@ -10,7 +10,7 @@ import (
 )
 
 type storage interface {
-	Set(key string, value string) error
+	Set(key string, ttl time.Time, value string) error
 	Del(key string) error
 }
 
@@ -63,7 +63,7 @@ func (r *recoverData) distributeData(message string) error {
     if parseRecordLifetime.Before(now) {
       return nil
     }
-		if err := r.store.Set(parts[5], parts[6]); err != nil {
+		if err := r.store.Set(parts[5],parseRecordLifetime, parts[6]); err != nil {
 			return fmt.Errorf("distributeData: failed set data: %w", err)
 		}
 	}
