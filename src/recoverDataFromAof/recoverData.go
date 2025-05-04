@@ -18,6 +18,8 @@ type recoverData struct {
 	store storage
 }
 
+const TIME_LAYOUT = "2006-01-02 15:04:05.9999999 -0700 MST"
+
 func New(store storage) *recoverData {
 	return &recoverData{
 		store: store,
@@ -46,24 +48,23 @@ func (r *recoverData) Recover(aofFilePath string) error {
 
 func (r *recoverData) distributeData(message string) error {
 	if strings.HasPrefix(message, constants.SET_COMMAND) {
-    const timeLayout = "2006-01-02 15:04:05.9999999 -0700 MST"
 		parts := strings.SplitN(message, " ", 7)
 
 		if len(parts) != 7 {
 			return fmt.Errorf("distributeData: incrorect set data string")
 		}
     
-    recordLifetime := fmt.Sprintf("%s %s %s %s", parts[1], parts[2], parts[3], parts[4])
-    parseRecordLifetime, err := time.Parse(timeLayout, recordLifetime)
+    recordLifeTime := fmt.Sprintf("%s %s %s %s", parts[1], parts[2], parts[3], parts[4])
+    parseRecordLifetime, timePass, err := r.checkValidTime(recordLifeTime)
     if err != nil {
-      return fmt.Errorf("distributeData: failed parse record lifetime: %w", err)
+      return fmt.Errorf("distributeData: failed check time valid: %w", err)
     }
-    
-    now := time.Now()
-    if parseRecordLifetime.Before(now) {
+
+    if !timePass {
       return nil
     }
-		if err := r.store.Set(parts[5],parseRecordLifetime, parts[6]); err != nil {
+
+		if err := r.store.Set(parts[5], parseRecordLifetime, parts[6]); err != nil {
 			return fmt.Errorf("distributeData: failed set data: %w", err)
 		}
 	}
@@ -80,4 +81,18 @@ func (r *recoverData) distributeData(message string) error {
 		}
 	}
 	return nil
+}
+
+func (r *recoverData) checkValidTime(lifetimeRecord string) (time.Time, bool, error) {
+    parseRecordLifetime, err := time.Parse(TIME_LAYOUT, lifetimeRecord)
+    if err != nil {
+      return parseRecordLifetime, false, fmt.Errorf("distributeData: failed parse record lifetime: %w", err)
+    }
+    
+    now := time.Now()
+    if parseRecordLifetime.Before(now) {
+      return parseRecordLifetime, false, nil
+    }
+
+    return parseRecordLifetime, true, nil
 }

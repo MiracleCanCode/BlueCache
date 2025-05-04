@@ -18,8 +18,8 @@ type AOF struct {
 	logger    *zap.Logger
 }
 
-const flushTimeDefault = time.Second * 10
-const maxBufferSize = 100
+const DEFAULT_FLUSH_TIME = time.Second * 10
+const MAX_BUFFER_SIZE = 100
 
 func NewAOF(aofFileDir string, log *zap.Logger) (*AOF, error) {
 	file, err := os.OpenFile(aofFileDir, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
@@ -29,8 +29,8 @@ func NewAOF(aofFileDir string, log *zap.Logger) (*AOF, error) {
 
 	aof := &AOF{
 		file:      file,
-		buffer:    make([]string, 0, maxBufferSize),
-		flushTime: flushTimeDefault,
+		buffer:    make([]string, 0, MAX_BUFFER_SIZE),
+		flushTime: DEFAULT_FLUSH_TIME,
 		logger:    log,
 	}
 
@@ -61,7 +61,7 @@ func (a *AOF) AppendOperation(method, key string, ttl time.Time, value ...string
 
 	a.buffer = append(a.buffer, message+"\n")
 
-	if len(a.buffer) >= maxBufferSize {
+	if len(a.buffer) >= MAX_BUFFER_SIZE {
 		if err := a.flush(); err != nil {
 			return fmt.Errorf("AppendOperation: failed flush: %w", err)
 		}

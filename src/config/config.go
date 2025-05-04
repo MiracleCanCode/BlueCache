@@ -3,7 +3,7 @@ package config
 import (
 	"flag"
 	"fmt"
-
+  "strings"
 	"github.com/ilyakaznacheev/cleanenv"
 )
 
@@ -21,6 +21,8 @@ type Config struct {
 	UserPassword      string
 }
 
+const TXT_FORMAT = ".txt"
+
 func New() (*Config, error) {
 	var user userData
 	_ = cleanenv.ReadEnv(&user)
@@ -33,6 +35,10 @@ func New() (*Config, error) {
 	userPassword := flag.String("user_password", "blueCache", "User password for BlueCache connection")
 
 	flag.Parse()
+  
+  if(!strings.HasSuffix(*pathToStorage, TXT_FORMAT)) {
+    return nil, fmt.Errorf("config: storage file is not txt file")
+  }
 
 	finalUserName := fallbackIfEmpty(*userName, user.Name)
 	finalUserPassword := fallbackIfEmpty(*userPassword, user.Password)

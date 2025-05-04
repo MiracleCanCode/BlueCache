@@ -92,7 +92,9 @@ func (s *storageHandler) HandleClient() {
 		}
 
 		if !isAuth {
-			s.formatAndSendBytes(constants.IncorrectUserData)
+			if err := s.formatAndSendBytes(constants.IncorrectUserData); err != nil {
+        s.logger.Error("Failed send error to user", zap.Error(err))
+      }
 			continue
 		}
 

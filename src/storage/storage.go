@@ -2,7 +2,6 @@ package storage
 
 import (
 	"fmt"
-	"strings"
   "time"
   "sync"
 	"github.com/minikeyvalue/src/utils/constants"
@@ -31,6 +30,7 @@ func New(aof aofInterface, recoverData bool) *Storage {
 func (s *Storage) Get(key string) (string, error) {
   s.mu.Lock()
   defer s.mu.Unlock()
+
 	data, ok := store[key]
 	if !ok {
 		return "", fmt.Errorf("Get: failed get data by key item is exist")
@@ -42,8 +42,7 @@ func (s *Storage) Get(key string) (string, error) {
   }
 
   if !s.checkRecordLifetime(ttl) {
-    delete(store, key)
-    delete(ttlStore, key)
+    s.clearStorageFromEntry(key)
     return "", fmt.Errorf("Get: failed get data life's time is up")
   }
 
@@ -53,6 +52,7 @@ func (s *Storage) Get(key string) (string, error) {
 func (s *Storage) Set(key string, ttl time.Time, value string) error {
   s.mu.Lock()
   defer s.mu.Unlock()
+
 	_, ok := store[key]
 	if ok {
 		return fmt.Errorf("Set: failed set data to storage, key is busy: %s", key)
@@ -74,15 +74,13 @@ func (s *Storage) Set(key string, ttl time.Time, value string) error {
 func (s *Storage) Del(key string) error {
   s.mu.Lock()
   defer s.mu.Unlock()
-	modifyKey := strings.TrimSpace(key)
 	if !s.recoverData {
 		if err := s.aofManager.AppendOperation(constants.DEL_COMMAND, key, time.Time{}); err != nil {
 			return fmt.Errorf("Del: failed append operation to aof file: %w", err)
 		}
 	}
 
-	delete(store, modifyKey)
-  delete(ttlStore, modifyKey)
+  s.clearStorageFromEntry(key)
 	return nil
 }
 
@@ -93,4 +91,9 @@ func (s *Storage) checkRecordLifetime(recordLifetime time.Time) bool {
   }   
 
   return true
+}
+
+func (s *Storage) clearStorageFromEntry(key string) {
+	delete(store, key)
+  delete(ttlStore, key)
 }
