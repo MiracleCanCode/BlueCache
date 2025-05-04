@@ -1,8 +1,3 @@
-# This workflow will build a golang project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
-
-name: Go
-
 on:
   push:
     branches: [ "main" ]
@@ -20,8 +15,9 @@ jobs:
       uses: actions/setup-go@v4
       with:
         go-version: '1.24'
-    - name: format
-        run: go fmt ./...
+
+    - name: Format code
+      run: go fmt ./...
 
     - name: Lint
       uses: golangci/golangci-lint-action@v7
