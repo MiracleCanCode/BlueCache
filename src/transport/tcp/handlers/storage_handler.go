@@ -24,6 +24,9 @@ type storageHandler struct {
 	cfg     *config.Config
 }
 
+const DEFAULT_TTL_TIME = time.Duration(time.Minute * 10) 
+const SYM_WRAP_TO_NEXT_LINE = '\n'
+
 func NewStorageHandler(logger *zap.Logger, conn net.Conn,
 	storage storageInterface, cfg *config.Config) *storageHandler {
 	return &storageHandler{
@@ -47,12 +50,16 @@ func (s *storageHandler) HandleClient() {
 	username, err := s.readUserMessage()
 	if err != nil {
 		s.logger.Error("Failed to read username", zap.Error(err))
-		s.formatAndSendBytes("Failed to read message, please, try again.")
+    if err := s.formatAndSendBytes("Failed to read message, please, try again."); err != nil {
+      s.logger.Error("Failed send message to user")
+    }
 		return
 	}
 
 	if username != s.cfg.UserName {
-		s.formatAndSendBytes(constants.IncorrectUserData)
+    if err := s.formatAndSendBytes(constants.IncorrectUserData); err != nil {
+      s.logger.Error("Failed send message to user")
+    }
 		return
 	}
 
@@ -64,12 +71,16 @@ func (s *storageHandler) HandleClient() {
 	password, err := s.readUserMessage()
 	if err != nil {
 		s.logger.Error("Failed to read password", zap.Error(err))
-		s.formatAndSendBytes("Failed to read message, please, try again.")
+    if err := s.formatAndSendBytes("Failed to read message, please, try again."); err != nil {
+      s.logger.Error("Failed send message to user")
+    }
 		return
 	}
 
 	if password != s.cfg.UserPassword {
-		s.formatAndSendBytes(constants.IncorrectUserData)
+    if err := s.formatAndSendBytes(constants.IncorrectUserData); err != nil {
+       s.logger.Error("Failed send message to user")
+    }
 		return
 	}
 
@@ -83,7 +94,9 @@ func (s *storageHandler) HandleClient() {
 		message, err := s.readUserMessage()
 		if err != nil {
 			s.logger.Error("Failed to read user message", zap.Error(err))
-			s.formatAndSendBytes("Failed to read message, please, try again.")
+      if err := s.formatAndSendBytes("Failed to read message, please, try again."); err != nil {
+        s.logger.Error("Failed send message to user")
+      }
 			return
 		}
 
@@ -99,9 +112,10 @@ func (s *storageHandler) HandleClient() {
 		}
 
 		if err := s.distributeCommands(message); err != nil {
-			errMsg := fmt.Sprintf("Error: %s", err.Error())
 			s.logger.Error("Failed processing request", zap.Error(err))
-			s.formatAndSendBytes(errMsg)
+			if err := s.formatAndSendBytes("Failed to read message, please, try again."); err != nil {
+        s.logger.Error("Failed send message to user")
+      }
 		}
 	}
 }
@@ -109,7 +123,7 @@ func (s *storageHandler) HandleClient() {
 func (s *storageHandler) distributeCommands(message string) error {
 	if message == constants.PING_COMMAND {
 		if err := s.ping(); err != nil {
-			return fmt.Errorf("Failed create response: %w", err)
+			return fmt.Errorf("distributeCommands: Failed create response: %w", err)
 		}
 	}
 
@@ -117,7 +131,7 @@ func (s *storageHandler) distributeCommands(message string) error {
 		parts := strings.SplitN(message, " ", 2)
 		data, err := s.get(parts[1])
 		if err != nil {
-			return fmt.Errorf("Failed get data from your storage: %w", err)
+			return fmt.Errorf("distributeCommands: Failed get data from your storage: %w", err)
 		}
 
 		if err := s.formatAndSendBytes(data); err != nil {
@@ -128,14 +142,14 @@ func (s *storageHandler) distributeCommands(message string) error {
 	if strings.HasPrefix(message, constants.SET_COMMAND) {
 		parts := strings.SplitN(message, " ", 3)
 		if err := s.set(parts[1], parts[2]); err != nil {
-			return fmt.Errorf("Failed set new data to storage: %w", err)
+			return fmt.Errorf("distributeCommands: Failed set new data to storage: %w", err)
 		}
 	}
 
 	if strings.HasPrefix(message, constants.DEL_COMMAND) {
 		parts := strings.SplitN(message, " ", 2)
 		if err := s.del(parts[1]); err != nil {
-			return fmt.Errorf("Failed delete data from storage: %w", err)
+			return fmt.Errorf("distributeCommands: Failed delete data from storage: %w", err)
 		}
 	}
 
@@ -143,7 +157,7 @@ func (s *storageHandler) distributeCommands(message string) error {
 }
 
 func (s *storageHandler) ping() error {
-	if err := s.formatAndSendBytes("PONG"); err != nil {
+	if err := s.formatAndSendBytes(constants.PONG_COMMAND); err != nil {
 		return fmt.Errorf("ping: failed send ping message for client: %w", err)
 	}
 	return nil
@@ -159,9 +173,8 @@ func (s *storageHandler) get(key string) (string, error) {
 }
 
 func (s *storageHandler) set(key string, value string) error {
-  defaultTimeTTL := time.Minute * 10
-  defaultTTL := time.Now().UTC().Add(defaultTimeTTL)
-	if err := s.storage.Set(key,  defaultTTL, value); err != nil {
+  now := time.Now()
+	if err := s.storage.Set(key, now.Add(DEFAULT_TTL_TIME), value); err != nil {
 		return fmt.Errorf("set: failed set data to storage: %w", err)
 	}
 
@@ -177,7 +190,7 @@ func (s *storageHandler) del(key string) error {
 
 func (s *storageHandler) readUserMessage() (string, error) {
 	reader := bufio.NewReader(s.conn)
-	message, err := reader.ReadString('\n')
+	message, err := reader.ReadString(SYM_WRAP_TO_NEXT_LINE)
 	if err != nil {
 		return "", fmt.Errorf("readUserMessage: failed to read user message: %w", err)
 	}

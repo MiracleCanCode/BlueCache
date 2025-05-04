@@ -6,4 +6,5 @@ const (
 	GET_COMMAND              = "GET"
 	PING_COMMAND             = "PING"
 	REGISTER_REPLICA_COMMAND = "REGISTER"
+  PONG_COMMAND = "PONG"
 )
