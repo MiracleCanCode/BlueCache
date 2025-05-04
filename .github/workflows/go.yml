@@ -20,6 +20,8 @@ jobs:
       uses: actions/setup-go@v4
       with:
         go-version: '1.24'
+    - name: Format code
+      run: go fmt ./...
 
     - name: Lint
       uses: golangci/golangci-lint-action@v7
